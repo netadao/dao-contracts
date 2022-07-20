@@ -138,7 +138,7 @@ jobs:
         run: cat ci/integration_tests/gas_report.json
 
       - name: Set GIT_BRANCH
-        run: export GIT_BRANCH=$(echo ${{ github.ref }} | sed 's|/|-|g')
+        run: echo "GIT_BRANCH=$(echo ${{ github.ref }} | sed 's|/|-|g')" >> $GITHUB_ENV
 
       - name: Upload Gas Report
         uses: actions/upload-artifact@v3
