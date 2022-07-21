@@ -5,7 +5,7 @@ use cw20::Cw20Coin;
 use cw20_staked_balance_voting::msg::ActiveThreshold;
 use cw_multi_test::{next_block, App, Contract, ContractWrapper, Executor};
 
-use cw_core::msg::ModuleInstantiateInfo;
+use cw_core::{msg::ModuleInstantiateInfo, state::ProposalModule};
 use cw_utils::Duration;
 
 use indexable_hooks::HooksResponse;
@@ -724,7 +724,7 @@ where
     let governance_addr =
         setup_governance(&mut app, govmod_id, instantiate, Some(initial_balances));
 
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr.clone(),
@@ -736,7 +736,7 @@ where
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     // Allow a proposal deposit as needed.
     let config: Config = app
@@ -879,7 +879,7 @@ fn test_propose() {
 
     let governance_addr =
         instantiate_with_cw20_balances_governance(&mut app, govmod_id, instantiate, None);
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr.clone(),
@@ -891,7 +891,7 @@ fn test_propose() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     // Check that the governance module has been configured correctly.
     let config: Config = app
@@ -969,7 +969,7 @@ fn test_propose_supports_stargate_message() {
 
     let governance_addr =
         instantiate_with_cw20_balances_governance(&mut app, govmod_id, instantiate, None);
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -981,7 +981,7 @@ fn test_propose_supports_stargate_message() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     // Create a new proposal.
     app.execute_contract(
@@ -1161,7 +1161,7 @@ fn test_voting_module_token_proposal_deposit_instantiate() {
     let voting_module = gov_state.voting_module;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let config: Config = app
         .wrap()
@@ -1328,7 +1328,7 @@ fn test_take_proposal_deposit() {
     let governance_modules = gov_state.proposal_modules;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -1425,7 +1425,7 @@ fn test_deposit_return_on_execute() {
     let governance_modules = gov_state.proposal_modules;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -1498,7 +1498,7 @@ fn test_close_open_proposal() {
     let governance_modules = gov_state.proposal_modules;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     // Close the proposal, this should error as the proposal is still
     // open and not expired.
@@ -1593,7 +1593,7 @@ fn test_deposit_return_on_close() {
     let governance_modules = gov_state.proposal_modules;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -1675,7 +1675,7 @@ fn test_execute_expired_proposal() {
     let proposal_modules = gov_state.proposal_modules;
 
     assert_eq!(proposal_modules.len(), 1);
-    let proposal_single = proposal_modules.into_iter().next().unwrap();
+    let proposal_single = proposal_modules.into_iter().next().unwrap().address;
 
     app.execute_contract(
         Addr::unchecked("ekez"),
@@ -1786,7 +1786,7 @@ fn test_update_config() {
     let governance_modules = gov_state.proposal_modules;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -1907,7 +1907,7 @@ fn test_no_return_if_no_refunds() {
     let governance_modules = gov_state.proposal_modules;
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -1963,7 +1963,7 @@ fn test_query_list_proposals() {
         }]),
     );
 
-    let gov_modules: Vec<Addr> = app
+    let gov_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             gov_addr,
@@ -1975,7 +1975,7 @@ fn test_query_list_proposals() {
         .unwrap();
     assert_eq!(gov_modules.len(), 1);
 
-    let govmod = gov_modules.into_iter().next().unwrap();
+    let govmod = gov_modules.into_iter().next().unwrap().address;
 
     for i in 1..10 {
         app.execute_contract(
@@ -2113,7 +2113,7 @@ fn test_hooks() {
 
     let governance_addr =
         instantiate_with_cw20_balances_governance(&mut app, govmod_id, instantiate, None);
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -2125,7 +2125,7 @@ fn test_hooks() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -2294,7 +2294,7 @@ fn test_active_threshold_absolute() {
             count: Uint128::new(100),
         }),
     );
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -2306,7 +2306,7 @@ fn test_active_threshold_absolute() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -2421,7 +2421,7 @@ fn test_active_threshold_percent() {
             percent: Decimal::percent(20),
         }),
     );
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -2433,7 +2433,7 @@ fn test_active_threshold_percent() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -2540,7 +2540,7 @@ fn test_active_threshold_none() {
 
     let governance_addr =
         instantiate_with_staking_active_threshold(&mut app, govmod_id, instantiate, None, None);
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -2552,7 +2552,7 @@ fn test_active_threshold_none() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let govmod_config: Config = app
         .wrap()
@@ -2619,7 +2619,7 @@ fn test_active_threshold_none() {
 
     let governance_addr =
         instantiate_with_cw20_balances_governance(&mut app, govmod_id, instantiate, None);
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -2631,7 +2631,7 @@ fn test_active_threshold_none() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     // Try and create a proposal, will succeed as IsActive is not implemented
     let _res = app
@@ -2683,7 +2683,12 @@ fn test_revoting() {
         .wrap()
         .query_wasm_smart(core_addr, &cw_core::msg::QueryMsg::DumpState {})
         .unwrap();
-    let proposal_module = core_state.proposal_modules.into_iter().next().unwrap();
+    let proposal_module = core_state
+        .proposal_modules
+        .into_iter()
+        .next()
+        .unwrap()
+        .address;
 
     // The supreme galatic floob rules over many DAOs with benevolance
     // and grace. The people of floob have become complacent in the
@@ -2809,7 +2814,12 @@ fn test_allow_revoting_config_changes() {
         .wrap()
         .query_wasm_smart(core_addr.clone(), &cw_core::msg::QueryMsg::DumpState {})
         .unwrap();
-    let proposal_module = core_state.proposal_modules.into_iter().next().unwrap();
+    let proposal_module = core_state
+        .proposal_modules
+        .into_iter()
+        .next()
+        .unwrap()
+        .address;
 
     // Create a proposal. This proposal should allow revoting.
     app.execute_contract(
@@ -2952,7 +2962,12 @@ fn test_revoting_same_vote_twice() {
         .wrap()
         .query_wasm_smart(core_addr, &cw_core::msg::QueryMsg::DumpState {})
         .unwrap();
-    let proposal_module = core_state.proposal_modules.into_iter().next().unwrap();
+    let proposal_module = core_state
+        .proposal_modules
+        .into_iter()
+        .next()
+        .unwrap()
+        .address;
 
     app.execute_contract(
         Addr::unchecked("ekez"),
@@ -3066,7 +3081,12 @@ fn test_three_of_five_multisig() {
         .wrap()
         .query_wasm_smart(core_addr, &cw_core::msg::QueryMsg::DumpState {})
         .unwrap();
-    let proposal_module = core_state.proposal_modules.into_iter().next().unwrap();
+    let proposal_module = core_state
+        .proposal_modules
+        .into_iter()
+        .next()
+        .unwrap()
+        .address;
 
     app.execute_contract(
         Addr::unchecked("one"),
@@ -3192,7 +3212,12 @@ fn test_three_of_five_multisig_reject() {
         .wrap()
         .query_wasm_smart(core_addr, &cw_core::msg::QueryMsg::DumpState {})
         .unwrap();
-    let proposal_module = core_state.proposal_modules.into_iter().next().unwrap();
+    let proposal_module = core_state
+        .proposal_modules
+        .into_iter()
+        .next()
+        .unwrap()
+        .address;
 
     app.execute_contract(
         Addr::unchecked("one"),
@@ -3363,7 +3388,12 @@ fn test_three_of_five_multisig_revoting() {
         .wrap()
         .query_wasm_smart(core_addr, &cw_core::msg::QueryMsg::DumpState {})
         .unwrap();
-    let proposal_module = core_state.proposal_modules.into_iter().next().unwrap();
+    let proposal_module = core_state
+        .proposal_modules
+        .into_iter()
+        .next()
+        .unwrap()
+        .address;
 
     app.execute_contract(
         Addr::unchecked("one"),
@@ -3571,7 +3601,7 @@ fn test_migrate() {
 
     let governance_addr =
         instantiate_with_cw20_balances_governance(&mut app, govmod_id, instantiate, None);
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr.clone(),
@@ -3583,7 +3613,7 @@ fn test_migrate() {
         .unwrap();
 
     assert_eq!(governance_modules.len(), 1);
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     let config: Config = app
         .wrap()
@@ -3645,7 +3675,7 @@ fn test_proposal_count_initialized_to_zero() {
     let proposal_modules = gov_state.proposal_modules;
 
     assert_eq!(proposal_modules.len(), 1);
-    let proposal_single = proposal_modules.into_iter().next().unwrap();
+    let proposal_single = proposal_modules.into_iter().next().unwrap().address;
 
     let proposal_count: u64 = app
         .wrap()
@@ -3691,7 +3721,7 @@ fn test_no_early_pass_with_min_duration() {
     let proposal_modules = gov_state.proposal_modules;
 
     assert_eq!(proposal_modules.len(), 1);
-    let proposal_single = proposal_modules.into_iter().next().unwrap();
+    let proposal_single = proposal_modules.into_iter().next().unwrap().address;
 
     app.execute_contract(
         Addr::unchecked("wale"),
@@ -3842,7 +3872,7 @@ fn test_min_duration_same_as_proposal_duration() {
     let proposal_modules = gov_state.proposal_modules;
 
     assert_eq!(proposal_modules.len(), 1);
-    let proposal_single = proposal_modules.into_iter().next().unwrap();
+    let proposal_single = proposal_modules.into_iter().next().unwrap().address;
 
     app.execute_contract(
         Addr::unchecked("wale"),
@@ -3936,7 +3966,7 @@ fn test_timestamp_updated() {
         ]),
     );
 
-    let governance_modules: Vec<Addr> = app
+    let governance_modules: Vec<ProposalModule> = app
         .wrap()
         .query_wasm_smart(
             governance_addr,
@@ -3947,7 +3977,7 @@ fn test_timestamp_updated() {
         )
         .unwrap();
 
-    let govmod_single = governance_modules.into_iter().next().unwrap();
+    let govmod_single = governance_modules.into_iter().next().unwrap().address;
 
     // Create 2 proposals.
     app.execute_contract(
@@ -4132,7 +4162,7 @@ fn test_return_deposit_to_dao_on_proposal_failure() {
     let proposal_modules = core_state.proposal_modules;
 
     assert_eq!(proposal_modules.len(), 1);
-    let proposal_single = proposal_modules.into_iter().next().unwrap();
+    let proposal_single = proposal_modules.into_iter().next().unwrap().address;
 
     // Make the proposal expire. It has now failed.
     app.update_block(|block| block.height += 10);
