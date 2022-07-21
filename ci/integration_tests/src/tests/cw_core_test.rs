@@ -44,7 +44,7 @@ fn execute_execute_admin_msgs() {
 
     let msg: CoreWasmMsg = WasmMsg::QueryMsg(cw_core::msg::QueryMsg::PauseInfo {});
     let res = Chain::process_msg("cw_core".to_string(), &msg).unwrap();
-    let res: PauseInfoResponse = serde_json::from_value(res[1]["data"].clone()).unwrap();
+    let res: PauseInfoResponse = serde_json::from_value(res["data"].clone()).unwrap();
 
     assert_eq!(res, PauseInfoResponse::Unpaused {});
 
