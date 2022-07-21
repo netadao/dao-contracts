@@ -20,7 +20,10 @@ fn execute_stake_tokens() {
     let voting_contract = "cw20_staked_balance_voting";
     let proposal_contract = "cw_proposal_single";
 
-    let dao = create_dao(None, user_addr.clone(), voting_contract, proposal_contract);
+    let res = create_dao(None, user_addr.clone(), voting_contract, proposal_contract);
+    assert!(res.is_ok());
+
+    let dao = res.unwrap();
 
     let voting_addr = dao.state.voting_module.as_str();
 

@@ -1,4 +1,5 @@
 use crate::test_harness::chain::Chain;
+use anyhow::Result;
 use cosm_orc::orchestrator::cosm_orc::WasmMsg;
 use cosmwasm_std::{to_binary, Decimal, Uint128};
 use cw20::Cw20Coin;
@@ -22,7 +23,7 @@ pub fn create_dao(
     user_addr: String,
     voting_contract: &str,
     proposal_contract: &str,
-) -> DaoState {
+) -> Result<DaoState> {
     let msgs: Vec<CoreWasmMsg> = vec![
         WasmMsg::InstantiateMsg(cw_core::msg::InstantiateMsg {
             admin,
@@ -50,8 +51,7 @@ pub fn create_dao(
                         initial_dao_balance: None,
                     },
                     active_threshold: None,
-                })
-                .unwrap(),
+                })?,
                 admin: Admin::CoreContract {},
                 label: "DAO DAO Voting Module".to_string(),
             },
@@ -71,8 +71,7 @@ pub fn create_dao(
                         deposit: Uint128::new(1000000000),
                         refund_failed_proposals: true,
                     }),
-                })
-                .unwrap(),
+                })?,
                 admin: Admin::CoreContract {},
                 label: "DAO DAO Proposal Module".to_string(),
             }],
@@ -80,13 +79,13 @@ pub fn create_dao(
         }),
         WasmMsg::QueryMsg(cw_core::msg::QueryMsg::DumpState {}),
     ];
-    let res = Chain::process_msgs("cw_core".to_string(), &msgs).unwrap();
-    let state: DumpStateResponse = serde_json::from_value(res[1]["data"].clone()).unwrap();
+    let res = Chain::process_msgs("cw_core".to_string(), &msgs)?;
+    let state: DumpStateResponse = serde_json::from_value(res[1]["data"].clone())?;
 
-    DaoState {
+    Ok(DaoState {
         addr: Chain::deploy_code_addr("cw_core"),
         state,
-    }
+    })
 }
 
 // TODO: Use a macro for these type aliases? (put this in cosm-orc)

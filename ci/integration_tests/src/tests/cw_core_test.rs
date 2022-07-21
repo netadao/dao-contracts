@@ -20,12 +20,14 @@ fn execute_execute_admin_msgs() {
     let user_addr = "juno10j9gpw9t4jsz47qgnkvl5n3zlm2fz72k67rxsg".to_string();
 
     // dao without an admin cannot execute admin msgs:
-    let dao = create_dao(
+    let res = create_dao(
         None,
         user_addr.clone(),
         "cw20_staked_balance_voting",
         "cw_proposal_single",
     );
+    assert!(res.is_ok());
+    let dao = res.unwrap();
 
     let msg: CoreWasmMsg = WasmMsg::ExecuteMsg(cw_core::msg::ExecuteMsg::ExecuteAdminMsgs {
         msgs: vec![CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
@@ -41,12 +43,14 @@ fn execute_execute_admin_msgs() {
     assert!(res.is_err());
 
     // dao with admin can execute admin msgs:
-    let dao = create_dao(
+    let res = create_dao(
         Some(user_addr.clone()),
         user_addr,
         "cw20_staked_balance_voting",
         "cw_proposal_single",
     );
+    assert!(res.is_ok());
+    let dao = res.unwrap();
 
     let msgs: Vec<CoreWasmMsg> = vec![
         WasmMsg::ExecuteMsg(cw_core::msg::ExecuteMsg::ExecuteAdminMsgs {
@@ -70,12 +74,14 @@ fn execute_execute_admin_msgs() {
 fn execute_items() {
     let admin_addr = "juno10j9gpw9t4jsz47qgnkvl5n3zlm2fz72k67rxsg".to_string();
 
-    let dao = create_dao(
+    let res = create_dao(
         Some(admin_addr.clone()),
         admin_addr,
         "cw20_staked_balance_voting",
         "cw_proposal_single",
     );
+    assert!(res.is_ok());
+    let dao = res.unwrap();
 
     let msg: CoreWasmMsg = WasmMsg::QueryMsg(cw_core::msg::QueryMsg::GetItem {
         key: "meme".to_string(),
@@ -116,15 +122,17 @@ fn execute_items() {
 fn instantiate_with_no_admin() {
     let user_addr = "juno10j9gpw9t4jsz47qgnkvl5n3zlm2fz72k67rxsg".to_string();
 
-    let dao = create_dao(
+    let res = create_dao(
         None,
         user_addr.clone(),
         "cw20_staked_balance_voting",
         "cw_proposal_single",
     );
+    assert!(res.is_ok());
+    let dao = res.unwrap();
 
     // ensure the dao is the admin:
-    assert_eq!(dao.state.admin, Chain::deploy_code_addr("cw_core"));
+    assert_eq!(dao.state.admin, dao.addr);
     assert_eq!(dao.state.pause_info, PauseInfoResponse::Unpaused {});
     assert_eq!(
         dao.state.config,
@@ -144,12 +152,14 @@ fn instantiate_with_admin() {
     let voting_contract = "cw20_staked_balance_voting";
     let proposal_contract = "cw_proposal_single";
 
-    let dao = create_dao(
+    let res = create_dao(
         Some(admin_addr.clone()),
         admin_addr.clone(),
         voting_contract,
         proposal_contract,
     );
+    assert!(res.is_ok());
+    let dao = res.unwrap();
 
     // general dao info is valid:
     assert_eq!(dao.state.admin, admin_addr);
