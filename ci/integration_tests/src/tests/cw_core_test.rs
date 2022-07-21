@@ -179,12 +179,12 @@ fn instantiate_with_admin() {
     let prop_addr = dao.state.proposal_modules[0].as_str();
 
     // voting module config is valid:
-    Chain::add_deploy_code_addr(voting_contract, voting_addr);
+    Chain::add_contract_addr(voting_contract, voting_addr);
     let msg: Cw20StakeBalanceWasmMsg =
         WasmMsg::QueryMsg(cw20_staked_balance_voting::msg::QueryMsg::StakingContract {});
     let staking_addr = &Chain::process_msg(voting_contract.to_string(), &msg).unwrap()["data"];
 
-    Chain::add_deploy_code_addr("cw20_stake", staking_addr.as_str().unwrap());
+    Chain::add_contract_addr("cw20_stake", staking_addr.as_str().unwrap());
     let msgs: Vec<Cw20StakeWasmMsg> = vec![
         WasmMsg::QueryMsg(cw20_stake::msg::QueryMsg::StakedValue {
             address: admin_addr.to_string(),
@@ -200,7 +200,7 @@ fn instantiate_with_admin() {
         serde_json::from_value(res[1]["data"].clone()).unwrap();
     assert_eq!(
         config_res.owner,
-        Some(Addr::unchecked(Chain::deploy_code_addr("cw_core")))
+        Some(Addr::unchecked(Chain::contract_addr("cw_core")))
     );
     assert_eq!(config_res.manager, None);
 
@@ -216,7 +216,7 @@ fn instantiate_with_admin() {
     assert_eq!(total_res.total, Uint128::new(0));
 
     // proposal module config is valid:
-    Chain::add_deploy_code_addr(proposal_contract, prop_addr);
+    Chain::add_contract_addr(proposal_contract, prop_addr);
     let msg: CwProposalWasmMsg = WasmMsg::QueryMsg(cw_proposal_single::msg::QueryMsg::Config {});
     let res = Chain::process_msg(proposal_contract.to_string(), &msg).unwrap();
     let config_res: cw_proposal_single::state::Config =
@@ -241,5 +241,5 @@ fn instantiate_with_admin() {
             quorum: PercentageThreshold::Percent(Decimal::percent(35)),
         }
     );
-    assert_eq!(config_res.dao, Chain::deploy_code_addr("cw_core"));
+    assert_eq!(config_res.dao, Chain::contract_addr("cw_core"));
 }

@@ -33,10 +33,10 @@ pub fn create_dao(
             automatically_add_cw20s: false,
             automatically_add_cw721s: false,
             voting_module_instantiate_info: ModuleInstantiateInfo {
-                code_id: Chain::deploy_code_id(voting_contract),
+                code_id: Chain::contract_code_id(voting_contract),
                 msg: to_binary(&cw20_staked_balance_voting::msg::InstantiateMsg {
                     token_info: cw20_staked_balance_voting::msg::TokenInfo::New {
-                        code_id: Chain::deploy_code_id("cw20_base"),
+                        code_id: Chain::contract_code_id("cw20_base"),
                         label: "DAO DAO Gov token".to_string(),
                         name: "DAO".to_string(),
                         symbol: "DAO".to_string(),
@@ -46,7 +46,7 @@ pub fn create_dao(
                             amount: Uint128::new(100_000_000),
                         }],
                         marketing: None,
-                        staking_code_id: Chain::deploy_code_id("cw20_stake"),
+                        staking_code_id: Chain::contract_code_id("cw20_stake"),
                         unstaking_duration: Some(Duration::Time(1209600)),
                         initial_dao_balance: None,
                     },
@@ -56,7 +56,7 @@ pub fn create_dao(
                 label: "DAO DAO Voting Module".to_string(),
             },
             proposal_modules_instantiate_info: vec![ModuleInstantiateInfo {
-                code_id: Chain::deploy_code_id(proposal_contract),
+                code_id: Chain::contract_code_id(proposal_contract),
                 msg: to_binary(&cw_proposal_single::msg::InstantiateMsg {
                     min_voting_period: None,
                     threshold: Threshold::ThresholdQuorum {
@@ -83,7 +83,7 @@ pub fn create_dao(
     let state: DumpStateResponse = serde_json::from_value(res[1]["data"].clone())?;
 
     Ok(DaoState {
-        addr: Chain::deploy_code_addr("cw_core"),
+        addr: Chain::contract_addr("cw_core"),
         state,
     })
 }

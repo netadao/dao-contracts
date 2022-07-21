@@ -30,7 +30,7 @@ impl Chain {
     }
 
     // returns the deployed code_id for the given contract name
-    pub fn deploy_code_id(contract_name: &str) -> u64 {
+    pub fn contract_code_id(contract_name: &str) -> u64 {
         let chain = Self::get().lock().unwrap();
 
         chain
@@ -41,8 +41,8 @@ impl Chain {
             .code_id
     }
 
-    // returns the deployed code address for the given contract name
-    pub fn deploy_code_addr(contract_name: &str) -> String {
+    // returns the deployed address for the given contract name
+    pub fn contract_addr(contract_name: &str) -> String {
         let chain = Self::get().lock().unwrap();
 
         chain
@@ -55,14 +55,14 @@ impl Chain {
             .expect("contract not deployed")
     }
 
-    pub fn add_deploy_code_addr(contract_name: &str, contract_addr: &str) {
+    pub fn add_contract_addr(contract_name: &str, contract_addr: &str) {
         let mut chain = Self::get().lock().unwrap();
 
         chain
             .cosm_orc
             .contract_map
             .get_mut(contract_name)
-            .unwrap()
+            .expect("contract not stored")
             .address = Some(contract_addr.to_string())
     }
 
@@ -108,13 +108,16 @@ impl Chain {
         chain
             .cosm_orc
             .store_contracts(contract_dir.as_str())
-            .unwrap();
+            .expect("error storing contracts");
     }
 
     pub fn save_gas_report() {
         let chain = Self::get().lock().unwrap();
 
-        let reports = chain.cosm_orc.profiler_reports().unwrap();
+        let reports = chain
+            .cosm_orc
+            .profiler_reports()
+            .expect("error fetching profile reports");
 
         let j: Value = serde_json::from_slice(&reports[0].json_data).unwrap();
         fs::write(chain.gas_report_out.clone(), j.to_string()).unwrap();

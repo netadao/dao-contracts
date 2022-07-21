@@ -28,13 +28,13 @@ fn execute_stake_tokens() {
     let voting_addr = dao.state.voting_module.as_str();
 
     // stake dao tokens:
-    Chain::add_deploy_code_addr(voting_contract, voting_addr);
+    Chain::add_contract_addr(voting_contract, voting_addr);
     let msg: Cw20StakeBalanceWasmMsg =
         WasmMsg::QueryMsg(cw20_staked_balance_voting::msg::QueryMsg::StakingContract {});
     let staking_addr = &Chain::process_msg(voting_contract.to_string(), &msg).unwrap()["data"];
     let staking_addr = staking_addr.as_str().unwrap();
 
-    Chain::add_deploy_code_addr("cw20_stake", staking_addr);
+    Chain::add_contract_addr("cw20_stake", staking_addr);
     let msgs: Vec<Cw20StakeWasmMsg> = vec![
         WasmMsg::QueryMsg(cw20_stake::msg::QueryMsg::StakedValue {
             address: user_addr.clone(),
@@ -47,7 +47,7 @@ fn execute_stake_tokens() {
     assert_eq!(staked_value.value, Uint128::new(0));
 
     let config: Config = serde_json::from_value(res[1]["data"].clone()).unwrap();
-    Chain::add_deploy_code_addr("cw20_base", config.token_address.as_str());
+    Chain::add_contract_addr("cw20_base", config.token_address.as_str());
     let msg: Cw20BaseWasmMsg = WasmMsg::ExecuteMsg(cw20_base::msg::ExecuteMsg::Send {
         contract: staking_addr.to_string(),
         amount: Uint128::new(100),
