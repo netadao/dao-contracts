@@ -77,6 +77,8 @@ jobs:
       ADMIN_ADDR: juno10j9gpw9t4jsz47qgnkvl5n3zlm2fz72k67rxsg
       KEY_NAME: localval
       GAS_REPORT_OUT: ./gas_report.json
+      CONFIG: configs/ci.yaml
+      CONTRACT_DIR: artifacts
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
@@ -132,7 +134,7 @@ jobs:
           key: ${{ runner.os }}-cargo-integration-${{ hashFiles('ci/integration_tests/Cargo.lock') }}
 
       - name: Run Integration Tests
-        run: cd ci/integration_tests/ && RUST_LOG=DEBUG CONTRACT_DIR="artifacts" cargo test
+        run: cd ci/integration_tests/ && RUST_LOG=DEBUG cargo test
 
       - name: Raw Gas Report
         run: cat ci/integration_tests/gas_report.json

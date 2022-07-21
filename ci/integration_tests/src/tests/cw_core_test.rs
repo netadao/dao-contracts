@@ -19,7 +19,7 @@ use voting::{deposit::CheckedDepositInfo, threshold::PercentageThreshold, thresh
 fn execute_execute_admin_msgs() {
     let user_addr = "juno10j9gpw9t4jsz47qgnkvl5n3zlm2fz72k67rxsg".to_string();
 
-    // dao without an admin cannot execute admin msgs:
+    // if you are not the admin, you cant execute admin msgs:
     let res = create_dao(
         None,
         user_addr.clone(),
@@ -42,7 +42,13 @@ fn execute_execute_admin_msgs() {
     let res = Chain::process_msg("cw_core".to_string(), &msg);
     assert!(res.is_err());
 
-    // dao with admin can execute admin msgs:
+    let msg: CoreWasmMsg = WasmMsg::QueryMsg(cw_core::msg::QueryMsg::PauseInfo {});
+    let res = Chain::process_msg("cw_core".to_string(), &msg).unwrap();
+    let res: PauseInfoResponse = serde_json::from_value(res[1]["data"].clone()).unwrap();
+
+    assert_eq!(res, PauseInfoResponse::Unpaused {});
+
+    // if you are the admin you can execute admin msgs:
     let res = create_dao(
         Some(user_addr.clone()),
         user_addr,
@@ -74,6 +80,7 @@ fn execute_execute_admin_msgs() {
 fn execute_items() {
     let admin_addr = "juno10j9gpw9t4jsz47qgnkvl5n3zlm2fz72k67rxsg".to_string();
 
+    // add item:
     let res = create_dao(
         Some(admin_addr.clone()),
         admin_addr,
@@ -94,7 +101,7 @@ fn execute_items() {
     let msgs: Vec<CoreWasmMsg> = vec![
         WasmMsg::ExecuteMsg(cw_core::msg::ExecuteMsg::ExecuteAdminMsgs {
             msgs: vec![CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-                contract_addr: dao.addr,
+                contract_addr: dao.addr.clone(),
                 msg: to_binary(&cw_core::msg::ExecuteMsg::SetItem {
                     key: "meme".to_string(),
                     addr: "foobar".to_string(),
@@ -113,7 +120,27 @@ fn execute_items() {
 
     assert_eq!(res.item, Some("foobar".to_string()));
 
-    // TODO: remove item
+    // remove item:
+    let msgs: Vec<CoreWasmMsg> = vec![
+        WasmMsg::ExecuteMsg(cw_core::msg::ExecuteMsg::ExecuteAdminMsgs {
+            msgs: vec![CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+                contract_addr: dao.addr,
+                msg: to_binary(&cw_core::msg::ExecuteMsg::RemoveItem {
+                    key: "meme".to_string(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })],
+        }),
+        WasmMsg::QueryMsg(cw_core::msg::QueryMsg::GetItem {
+            key: "meme".to_string(),
+        }),
+    ];
+
+    let res = Chain::process_msgs("cw_core".to_string(), &msgs).unwrap();
+    let res: GetItemResponse = serde_json::from_value(res[1]["data"].clone()).unwrap();
+
+    assert_eq!(res.item, None);
 }
 
 // #### InstantiateMsg #####
