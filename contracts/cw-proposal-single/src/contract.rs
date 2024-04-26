@@ -708,6 +708,10 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
     let ContractVersion { version, .. } = get_contract_version(deps.storage)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    if version == CONTRACT_VERSION {
+        return Err(ContractError::AlreadyMigrated {});
+    }
+
     match msg {
         MigrateMsg::NetaToV1 {} => {
             let current_config = neta::state::CONFIG.load(deps.storage)?;

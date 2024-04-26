@@ -62,4 +62,7 @@ pub enum ContractError {
 
     #[error("Min voting period must be less than or equal to max voting period")]
     InvalidMinVotingPeriod {},
+
+    #[error("can not migrate. current version is up to date")]
+    AlreadyMigrated {},
 }

@@ -55,6 +55,16 @@ fn single_proposal_contract() -> Box<dyn Contract<Empty>> {
     .with_migrate(crate::contract::migrate);
     Box::new(contract)
 }
+fn neta_proposal_contract() -> Box<dyn Contract<Empty>> {
+    let contract = ContractWrapper::new(
+        cw_proposal_single_v1::contract::execute,
+        cw_proposal_single_v1::contract::instantiate,
+        cw_proposal_single_v1::contract::query,
+    )
+    .with_reply(crate::contract::reply)
+    .with_migrate(crate::contract::migrate);
+    Box::new(contract)
+}
 
 fn cw20_balances_voting() -> Box<dyn Contract<Empty>> {
     let contract = ContractWrapper::new(
@@ -3378,7 +3388,8 @@ fn test_large_absolute_count_threshold() {
 #[test]
 fn test_migrate() {
     let mut app = App::default();
-    let govmod_id = app.store_code(single_proposal_contract());
+    // load custom netadao contract
+    let neta_govmod_id = app.store_code(neta_proposal_contract());
 
     let threshold = Threshold::AbsolutePercentage {
         percentage: PercentageThreshold::Majority {},
@@ -3392,9 +3403,9 @@ fn test_migrate() {
         allow_revoting: false,
         deposit_info: None,
     };
-
+    // create dao with custom netadao contract
     let governance_addr =
-        instantiate_with_cw20_balances_governance(&mut app, govmod_id, instantiate, None);
+        instantiate_with_cw20_balances_governance(&mut app, neta_govmod_id, instantiate, None);
     let governance_modules: Vec<Addr> = app
         .wrap()
         .query_wasm_smart(
@@ -3408,6 +3419,9 @@ fn test_migrate() {
 
     assert_eq!(governance_modules.len(), 1);
     let govmod_single = governance_modules.into_iter().next().unwrap();
+
+    // load custom v1 contract to migrate into
+    let govmod_id = app.store_code(single_proposal_contract());
 
     let config: Config = app
         .wrap()
@@ -3429,9 +3443,10 @@ fn test_migrate() {
         .query_wasm_smart(govmod_single, &QueryMsg::Config {})
         .unwrap();
 
+    // confirm migration was successful 
     assert_eq!(config, new_config);
 
-    // TODO: test migration from new v1 to v2 now
+    // TODO: test migration from new v1 to v2
 }
 
 #[test]
