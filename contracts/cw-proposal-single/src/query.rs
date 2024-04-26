@@ -4,14 +4,13 @@ use serde::{Deserialize, Serialize};
 
 use voting::voting::Vote;
 
-use crate::proposal::SingleChoiceProposal;
+use crate::proposal::Proposal;
 
 /// Information about a proposal returned by proposal queries.
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 pub struct ProposalResponse {
-    /// The ID of the proposal being returned.
     pub id: u64,
-    pub proposal: SingleChoiceProposal,
+    pub proposal: Proposal,
 }
 
 /// Information about a vote that was cast.

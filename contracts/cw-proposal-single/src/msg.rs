@@ -1,10 +1,10 @@
-use cosmwasm_std::{CosmosMsg, Empty};
+use cosmwasm_std::{CosmosMsg, Empty, Uint128};
 use cw_utils::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cw_core_macros::govmod_query;
-use voting::{deposit::DepositInfo, threshold::Threshold, voting::Vote};
+use voting::threshold::Threshold;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -32,10 +32,6 @@ pub struct InstantiateMsg {
     /// proposal. None if there is no deposit requirement, Some
     /// otherwise.
     pub deposit_info: Option<DepositInfo>,
-    /// This address will have special permission to veto
-    /// any proposal they deem malicious to the goals and
-    /// mission of the dao.
-    pub executor_addr: Option<String>,
 }
 
 /// Information about the token to use for proposal deposits.
@@ -51,6 +47,19 @@ pub enum DepositToken {
     /// `cw_core_macros::token_query`. Failing to implement that
     /// and using this option will cause instantiation to fail.
     VotingModuleToken {},
+}
+
+/// Information about the deposit required to create a proposal.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
+pub struct DepositInfo {
+    /// The address of the cw20 token to be used for proposal
+    /// deposits.
+    pub token: DepositToken,
+    /// The number of tokens that must be deposited to create a
+    /// proposal.
+    pub deposit: Uint128,
+    /// If failed proposals should have their deposits refunded.
+    pub refund_failed_proposals: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -72,11 +81,7 @@ pub enum ExecuteMsg {
         /// The ID of the proposal to vote on.
         proposal_id: u64,
         /// The senders position on the proposal.
-        vote: Vote,
-    },
-    /// Allows executor to veto proposals
-    Veto {
-        proposal_id: u64,
+        vote: voting::voting::Vote,
     },
     /// Causes the messages associated with a passed proposal to be
     /// executed by the DAO.
@@ -122,31 +127,17 @@ pub enum ExecuteMsg {
         /// proposal. None if no deposit, Some otherwise.
         deposit_info: Option<DepositInfo>,
     },
-    /// Adds an address as a consumer of proposal hooks. Consumers of
-    /// proposal hooks have hook messages executed on them whenever
-    /// the status of a proposal changes or a proposal is created. If
-    /// a consumer contract errors when handling a hook message it
-    /// will be removed from the list of consumers.
     AddProposalHook {
         address: String,
     },
-    /// Removes a consumer of proposal hooks.
     RemoveProposalHook {
         address: String,
     },
-    /// Adds an address as a consumer of vote hooks. Consumers of vote
-    /// hooks have hook messages executed on them whenever the a vote
-    /// is cast. If a consumer contract errors when handling a hook
-    /// message it will be removed from the list of consumers.
     AddVoteHook {
         address: String,
     },
-    /// Removed a consumer of vote hooks.
     RemoveVoteHook {
         address: String,
-    },
-    AssignExecutor {
-        address: Option<String>,
     },
 }
 
@@ -158,56 +149,32 @@ pub enum QueryMsg {
     Config {},
     /// Gets information about a proposal. Returns
     /// `proposals::Proposal`.
-    Proposal { proposal_id: u64 },
-    /// Lists all the proposals that have been cast in this
-    /// module. Returns `query::ProposalListResponse`.
-    ListProposals {
-        /// The proposal ID to start listing proposals after. For
-        /// example, if this is set to 2 proposals with IDs 3 and
-        /// higher will be returned.
-        start_after: Option<u64>,
-        /// The maximum number of proposals to return as part of this
-        /// query. If no limit is set a max of 30 proposals will be
-        /// returned.
-        limit: Option<u64>,
-    },
-    /// Lists all of the proposals that have been cast in this module
-    /// in decending order of proposal ID. Returns
-    /// `query::ProposalListResponse`.
-    ReverseProposals {
-        /// The proposal ID to start listing proposals before. For
-        /// example, if this is set to 6 proposals with IDs 5 and
-        /// lower will be returned.
-        start_before: Option<u64>,
-        /// The maximum number of proposals to return as part of this
-        /// query. If no limit is set a max of 30 proposals will be
-        /// returned.
-        limit: Option<u64>,
-    },
-    /// Returns the number of proposals that have been created in this
-    /// module.
-    ProposalCount {},
-    /// Returns a voters position on a propsal. Returns
-    /// `query::VoteResponse`.
-    Vote { proposal_id: u64, voter: String },
-    /// Lists all of the votes that have been cast on a
-    /// proposal. Returns `VoteListResponse`.
-    ListVotes {
-        /// The proposal to list the votes of.
+    Proposal {
         proposal_id: u64,
-        /// The voter to start listing votes after. Ordering is done
-        /// alphabetically.
-        start_after: Option<String>,
-        /// The maximum number of votes to return in response to this
-        /// query. If no limit is specified a max of 30 are returned.
+    },
+    ListProposals {
+        start_after: Option<u64>,
         limit: Option<u64>,
     },
-    /// Lists all of the consumers of proposal hooks for this module.
+    ReverseProposals {
+        start_before: Option<u64>,
+        limit: Option<u64>,
+    },
+    ProposalCount {},
+    Vote {
+        proposal_id: u64,
+        voter: String,
+    },
+    ListVotes {
+        proposal_id: u64,
+        start_after: Option<String>,
+        limit: Option<u64>,
+    },
     ProposalHooks {},
-    /// Lists all of the consumers of vote hooks for this
-    /// module. Returns indexable_hooks::HooksResponse.
     VoteHooks {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
-pub struct MigrateMsg {}
+pub enum MigrateMsg {
+    NetaToV1 {}
+}
