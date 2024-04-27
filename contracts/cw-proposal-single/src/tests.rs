@@ -3443,7 +3443,7 @@ fn test_migrate() {
         .query_wasm_smart(govmod_single, &QueryMsg::Config {})
         .unwrap();
 
-    // confirm migration was successful 
+    // confirm migration was successful
     assert_eq!(config, new_config);
 
     // TODO: test migration from new v1 to v2

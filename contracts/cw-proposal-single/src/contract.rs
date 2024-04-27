@@ -28,7 +28,8 @@ use crate::{
         get_deposit_msg, get_return_deposit_msg, Ballot, Config, BALLOTS, CONFIG, OG_CONFIG,
         PROPOSALS, PROPOSAL_COUNT, PROPOSAL_HOOKS, VOTE_HOOKS,
     },
-    utils::{get_total_power, get_voting_power, validate_voting_period}, v1_neta::{neta_duration_to_v2, neta_percentage_threshold_to_v1, neta_threshold_to_v1},
+    utils::{get_total_power, get_voting_power, validate_voting_period},
+    v1_neta::{neta_duration_to_v2, neta_threshold_to_v1},
 };
 
 const CONTRACT_NAME: &str = "crates.io:cw-govmod-single";
@@ -723,16 +724,19 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
                 &Config {
                     threshold: neta_threshold_to_v1(current_config.threshold),
                     max_voting_period,
-                    min_voting_period: current_config.min_voting_period.map(neta_duration_to_v2) ,
+                    min_voting_period: current_config.min_voting_period.map(neta_duration_to_v2),
                     only_members_execute: current_config.only_members_execute,
                     allow_revoting: current_config.allow_revoting,
                     dao: current_config.dao.clone(),
                     deposit_info: None,
                 },
             )?;
+            Ok(Response::default()
+                .add_attribute("action", "migrate")
+                .add_attribute("from", "netadao"))
         }
+        MigrateMsg::FromCompatible {} => Ok(Response::default()),
     }
-    Ok(Response::default())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
