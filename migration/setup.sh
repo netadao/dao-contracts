@@ -368,7 +368,6 @@ MIGRATE_MSG=$(cat <<EOF
 EOF
 )
 
-echo $MIGRATE_MSG
 v1v2res='$binary tx wasm migrate $dao_addr $v2_dao_code_id "$MIGRATE_MSG" --from test1 --gas auto --gas-adjustment 2 --gas-prices 0.05ujuno -y -o json'
 v1v2_tx=$(eval $v1v2res);
 
@@ -382,3 +381,13 @@ if [ -n "$v1v2_tx" ]; then
 else
     echo "Error: Empty response"
 fi
+
+########################## 7.Test Migration Worked ########################
+QUERY=$(cat <<EOF 
+{"dump_state":{}}
+EOF
+)
+confirm_migrate_query='$binary q wasm contract-state smart $dao_addr "$QUERY" -o json'
+migrate_res=$(eval $confirm_migrate_query);
+version=$(echo $migrate_res | jq -r '.data.version.version')
+echo $version
