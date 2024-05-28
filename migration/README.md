@@ -3,21 +3,30 @@
 ## Step 1: re-upload contracts
 to get the dao contracts being used:
 ```
-junod q wasm code 432 cw-core.wasm
-junod q wasm code 431 cw20-staked-balance-voting.wasm
-junod q wasm code 627 cw-proposal-single.wasm
-junod q wasm code 430 cw20-stake.wasm
-junod q wasm code 1 cw20.wasm
+junod config node     https://juno-rpc.lavenderfive.com:443
+junod q wasm code 627 ./current-contracts/cw-proposal-single.wasm
+junod q wasm code 431 ./current-contracts/cw20-staked-balance-voting.wasm
+junod q wasm code 432 ./current-contracts/cw-core.wasm
+junod q wasm code 430 ./current-contracts/cw20-stake.wasm
+junod q wasm code 1   ./current-contracts/cw20.wasm
+junod q wasm code 429 ./current-contracts/cw4-voting.wasm
 ```
 to get the v1 contracts needed:
 ```
-# cw_proposal_single
-# pre_proposal_single
+# build custom proposal contract for migration
+cd ../
 # ...
+
 ```
 to get the v2 contracts needed:
-```
-
+```sh
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/cw20_stake.wasm 
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/dao_dao_core.wasm 
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/dao_migrator.wasm 
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/dao_pre_propose_single.wasm
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/dao_proposal_single.wasm 
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/dao_voting_cw20_staked.wasm 
+wget https://github.com/DA0-DA0/dao-contracts/releases/download/v2.4.2/dao_voting_cw4.wasm 
 ```
 ## Step 2: re-create Neta DAO instance
 to recreate the dao, we need the dao framework as well as an external cw20 token created
