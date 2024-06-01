@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use voting::{
     status::Status,
     threshold::{PercentageThreshold, Threshold},
-    voting::{compare_vote_count, Vote, VoteCmp, Votes},
+    voting::{compare_vote_count, VoteCmp, Votes},
 };
 
 

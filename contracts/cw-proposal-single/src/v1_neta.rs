@@ -1,8 +1,9 @@
+use cw_utils::Duration;
 use voting::threshold::{PercentageThreshold, Threshold};
-use cw_utils::{Duration, Expiration};
 
-
-pub fn neta_percentage_threshold_to_v1(neta: voting_v1::PercentageThreshold) -> PercentageThreshold {
+pub fn neta_percentage_threshold_to_v1(
+    neta: voting_v1::PercentageThreshold,
+) -> PercentageThreshold {
     match neta {
         voting_v1::PercentageThreshold::Majority {} => PercentageThreshold::Majority {},
         voting_v1::PercentageThreshold::Percent(p) => PercentageThreshold::Percent(p),
@@ -28,4 +29,3 @@ pub fn neta_duration_to_v2(neta: cw_utils::Duration) -> Duration {
         cw_utils::Duration::Time(time) => Duration::Time(time),
     }
 }
-
