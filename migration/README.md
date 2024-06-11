@@ -35,3 +35,12 @@ to recreate the dao, we need the dao framework as well as an external cw20 token
 this is the migration on the custom proposal contract that restores compatiblility with the v1 -> v2 migration workflow dao-dao has implemented. This can be done through governance, or by the contract admin.
 
 ## Step 5: migrate dao framework from v1 -> v2
+
+## Syntax Bug: Incosistent internal proposal-id syntaxt for pre-propose & proposal contracts
+
+Testing proposals post v1-> v2 migration revealed logs emitted from the pre-propose module containing a proposal id incosistent with the correct proposal id. 
+
+This may introduce complexity for any custom pre-propose logic that may be introduced in the future, however does not seem to impact any of the voting workflow, inculding any refunding necessary for proposal deposits. (confirmed in tests)
+
+### Remedy 
+A future migration of the v2 proposal contract to internally reflect the correct value for the pre-proposal contract may be necessary. This approach avoids customizing the existing v1-v2 migration workflow already production ready for daos. 

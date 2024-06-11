@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Reply, Response,
-    StdResult, Storage, WasmMsg,
+    to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Order, Reply,
+    Response, StdResult, Storage, WasmMsg,
 };
 use cw2::{get_contract_version, set_contract_version, ContractVersion};
 use cw_core_interface::voting::IsActiveResponse;
@@ -29,7 +29,10 @@ use crate::{
         PROPOSALS, PROPOSAL_COUNT, PROPOSAL_HOOKS, VOTE_HOOKS,
     },
     utils::{get_total_power, get_voting_power, validate_voting_period},
-    v1_neta::{neta_duration_to_v2, neta_threshold_to_v1},
+    v1_neta::{
+        neta_duration_to_v1, neta_expiration_to_v1, neta_status_to_v1, neta_threshold_to_v1,
+        neta_votes_to_v1,
+    },
 };
 
 const CONTRACT_NAME: &str = "crates.io:cw-govmod-single";
@@ -69,9 +72,9 @@ pub fn instantiate(
         allow_revoting: msg.allow_revoting,
     };
 
-    // Initialize proposal count to zero so that queries return zero
+    // Initialize proposal count to 0 so that queries return zero
     // instead of None.
-    PROPOSAL_COUNT.save(deps.storage, &0)?;
+    PROPOSAL_COUNT.save(deps.storage, &1)?;
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default()
@@ -716,7 +719,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
     match msg {
         MigrateMsg::NetaToV1 {} => {
             let current_config = neta::state::CONFIG.load(deps.storage)?;
-            let max_voting_period = neta_duration_to_v2(current_config.max_voting_period);
+            let max_voting_period = neta_duration_to_v1(current_config.max_voting_period);
 
             // Update the stored config to remove the customized executor stuff.
             OG_CONFIG.save(
@@ -724,13 +727,54 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
                 &Config {
                     threshold: neta_threshold_to_v1(current_config.threshold),
                     max_voting_period,
-                    min_voting_period: current_config.min_voting_period.map(neta_duration_to_v2),
+                    min_voting_period: current_config.min_voting_period.map(neta_duration_to_v1),
                     only_members_execute: current_config.only_members_execute,
                     allow_revoting: current_config.allow_revoting,
                     dao: current_config.dao.clone(),
                     deposit_info: None,
                 },
             )?;
+
+            let current_proposals = neta::state::PROPOSALS
+                .range(deps.storage, None, None, Order::Ascending)
+                .collect::<StdResult<Vec<(u64, neta::proposal::Proposal)>>>()?;
+
+            current_proposals
+                .clone()
+                .into_iter()
+                .try_for_each::<_, Result<_, ContractError>>(|(id, prop)| {
+                    if prop
+                        .deposit_info
+                        .map(|info| !info.deposit.is_zero())
+                        .unwrap_or(false)
+                        && prop.status != voting_v1::Status::Closed
+                        && prop.status != voting_v1::Status::Executed
+                    {
+                        // No migration path for outstanding
+                        // deposits.
+                        return Err(ContractError::PendingProposals {});
+                    }
+
+                    let migrated_proposal = Proposal {
+                        title: prop.title,
+                        description: prop.description,
+                        proposer: prop.proposer,
+                        start_height: prop.start_height,
+                        min_voting_period: prop.min_voting_period.map(neta_expiration_to_v1),
+                        expiration: neta_expiration_to_v1(prop.expiration),
+                        threshold: neta_threshold_to_v1(prop.threshold),
+                        total_power: prop.total_power,
+                        msgs: prop.msgs,
+                        status: neta_status_to_v1(prop.status),
+                        votes: neta_votes_to_v1(prop.votes),
+                        allow_revoting: prop.allow_revoting,
+                        deposit_info: None,
+                    };
+                    // PROPOSAL_COUNT.save(deps.storage, &(id ))?;
+                    PROPOSALS
+                        .save(deps.storage, id, &migrated_proposal)
+                        .map_err(|e| e.into())
+                })?;
             Ok(Response::default()
                 .add_attribute("action", "migrate")
                 .add_attribute("from", "netadao"))

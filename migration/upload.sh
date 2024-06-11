@@ -1,6 +1,6 @@
 
-gas_prices=0.01ujuno
-chain_id=120u-1
+gas_prices=0.025ujunox
+chain_id=uni-6
 binary=junod
 
 flags="--from test1 --gas-prices '$gas_prices'  --gas-adjustment 1.7 --gas auto --chain-id '$chain_id' --yes -o json"
@@ -9,15 +9,16 @@ for d in ./current-contracts/*.wasm; do
     echo $d;
     response_command="'$binary' tx wasm store $d $flags";
     response=$(eval $response_command);
+    echo $response
+        sleep 3;
     if [ -n "$response" ]; then
         txhash=$(echo "$response" | jq -r '.txhash')
         echo "Using txhash: $txhash"
-        sleep 3;
-
         query_command=''$binary' q tx '$txhash' -o json'
         response=$(eval "$query_command")
         code_id=$( echo "$response" | sed -n 's/.*"key":"code_id","value":"\([^"]*\)".*/\1/p' )
         echo $code_id;
+         sleep 3;
     else
         echo "Error: Empty response"
     fi
@@ -29,15 +30,16 @@ for d in ./new-contracts/*.wasm; do
     echo $d;
     response_command="'$binary' tx wasm store $d $flags";
     response=$(eval $response_command);
+    echo $response
+        sleep 3;
     if [ -n "$response" ]; then
         txhash=$(echo "$response" | jq -r '.txhash')
         echo "Using txhash: $txhash"
-        sleep 3;
-
         query_command=''$binary' q tx '$txhash' -o json'
         response=$(eval "$query_command")
         code_id=$( echo "$response" | sed -n 's/.*"key":"code_id","value":"\([^"]*\)".*/\1/p' )
         echo $code_id;
+        sleep 3;
     else
         echo "Error: Empty response"
     fi
@@ -53,9 +55,11 @@ done
 ## - pre_propose_single_code_id
 ## - v2_dao_code_id
 for d in ./v2-contracts/*.wasm; do
+    sleep 3;
     echo $d;
     response_command="'$binary' tx wasm store $d $flags";
     response=$(eval $response_command);
+    echo $response
     if [ -n "$response" ]; then
         txhash=$(echo "$response" | jq -r '.txhash')
         echo "Using txhash: $txhash"

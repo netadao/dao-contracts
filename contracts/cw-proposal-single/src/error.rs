@@ -65,4 +65,9 @@ pub enum ContractError {
 
     #[error("can not migrate. current version is up to date")]
     AlreadyMigrated {},
+
+    #[error(
+        "all proposals with deposits must be completed out (closed or executed) before migration"
+    )]
+    PendingProposals {},
 }
