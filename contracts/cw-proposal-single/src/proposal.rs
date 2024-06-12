@@ -53,6 +53,9 @@ pub fn advance_proposal_id(store: &mut dyn Storage) -> StdResult<u64> {
     PROPOSAL_COUNT.save(store, &id)?;
     Ok(id)
 }
+pub fn next_proposal_id(store: &dyn Storage) -> StdResult<u64> {
+    Ok(PROPOSAL_COUNT.may_load(store)?.unwrap_or_default() + 1)
+}
 
 pub fn does_vote_count_pass(
     yes_votes: Uint128,

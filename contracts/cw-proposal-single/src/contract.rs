@@ -22,7 +22,7 @@ use voting::{
 use crate::{
     error::ContractError,
     msg::{DepositInfo, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
-    proposal::{advance_proposal_id, Proposal},
+    proposal::{advance_proposal_id, next_proposal_id, Proposal},
     query::{ProposalListResponse, ProposalResponse, VoteInfo, VoteListResponse, VoteResponse},
     state::{
         get_deposit_msg, get_return_deposit_msg, Ballot, Config, BALLOTS, CONFIG, OG_CONFIG,
@@ -606,6 +606,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => query_reverse_proposals(deps, env, start_before, limit),
         QueryMsg::ProposalHooks {} => to_binary(&PROPOSAL_HOOKS.query_hooks(deps)?),
         QueryMsg::VoteHooks {} => to_binary(&VOTE_HOOKS.query_hooks(deps)?),
+        QueryMsg::NextProposalId {} => query_next_proposal_id(deps),
     }
 }
 
@@ -660,6 +661,10 @@ pub fn query_reverse_proposals(
 pub fn query_proposal_count(deps: Deps) -> StdResult<Binary> {
     let proposal_count = PROPOSAL_COUNT.load(deps.storage)?;
     to_binary(&proposal_count)
+}
+
+pub fn query_next_proposal_id(deps: Deps) -> StdResult<Binary> {
+    to_binary(&next_proposal_id(deps.storage)?)
 }
 
 pub fn query_vote(deps: Deps, proposal_id: u64, voter: String) -> StdResult<Binary> {
@@ -770,7 +775,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
                         allow_revoting: prop.allow_revoting,
                         deposit_info: None,
                     };
-                    // PROPOSAL_COUNT.save(deps.storage, &(id ))?;
+                    PROPOSAL_COUNT.save(deps.storage, &(id))?;
                     PROPOSALS
                         .save(deps.storage, id, &migrated_proposal)
                         .map_err(|e| e.into())

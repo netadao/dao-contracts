@@ -151,7 +151,8 @@ pub enum QueryMsg {
     /// `proposals::Proposal`.
     Proposal {
         proposal_id: u64,
-    },
+        },
+    NextProposalId {},
     ListProposals {
         start_after: Option<u64>,
         limit: Option<u64>,

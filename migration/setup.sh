@@ -1,15 +1,16 @@
 # Workflow 
-admin_key=test1
-admin_addr=
-bid_key=
+admin_key= # main key for tx
+admin_addr=  
+bid_key= # secondary key for complexity in proposers
 bid_addr=
-binary=junod
-denom=ujunox 
-tx_flag="--from $admin_key --gas auto --gas-adjustment 2 --gas-prices 0.05$denom -y -o json"
-tx_flag2="--from $bid_key --gas auto --gas-adjustment 2 --gas-prices 0.05$denom -y -o json"
+binary=junod 
+denom=ujunox # primary token
+tx_flag="--from $admin_key --gas auto --gas-adjustment 2 --gas-prices 0.05$denom -y -o json" # transaction flags for admin_key
+tx_flag2="--from $bid_key --gas auto --gas-adjustment 2 --gas-prices 0.05$denom -y -o json"  # transaction flags for bid_key
 
-################## 1. Store All Contracts ##################
-### run: sh upload.sh
+################## Store All Contracts ##################
+### First,  run `sh upload.sh` to store all of the contracts required.
+### Then, populate the correct ids for this scripts contract variables.
 ## Old NetaDAO Contracts
 cw_core_code_id=4509
 cw_proposal_single_code_id=4510
@@ -71,11 +72,10 @@ MSG=$(cat <<EOF
 }
 EOF
 )
-
+echo " ################## Instantiate Mock NETA CW20 ##################"
 cw20_i=$($binary tx wasm i $cw20_code_id "$MSG" $tx_flag --label="cw20" --admin $admin_addr  )
 echo "$cw20_i"
 cw20_hash=$(echo "$cw20_i" | jq -r '.txhash')
-
 sleep 6;
 cw20_tx=$($binary q tx $cw20_hash -o json)
 cw20_addr=$(echo "$cw20_tx" | jq -r '.logs[].events[] | select(.type == "instantiate") | .attributes[] | select(.key == "_contract_address") | .value')
@@ -92,8 +92,7 @@ bal_res2=$(eval $bal_q2);
 echo $bal_res2;
 
 
-# ############################ 3. Instantiate Mock NETA DAO ############################
-echo "Instantiate Mock NETA DAO"
+# ############################ 4. Instantiate Mock NETA DAO ############################
 # proposal module info 
 I_PROP_MODULE=$(cat <<EOF 
 {
@@ -177,6 +176,7 @@ DAO_MSG=$(cat <<EOF
 
 EOF
 )
+echo "################ 4. Instantiate Mock NETA DAO ############"
 dao_response=''$binary' tx wasm i '$cw_core_code_id' "$DAO_MSG"  '$tx_flag' --label="neta-dao" --admin '$admin_addr' -y -o json'
 dao_res=$(eval $dao_response);
 echo $dao_res
@@ -192,18 +192,25 @@ if [ -n "$dao_res" ]; then
     proposal_addr=$(echo "$tx_response" | jq -r '.logs[].events[] | select(.type == "wasm") | .attributes[] | select(.key == "prop_module") | .value')
     voting_addr=$(echo "$tx_response" | jq -r '.logs[].events[] | select(.type == "wasm") | .attributes[] | select(.key == "voting_module") | .value')
     staking_addr=$(echo "$tx_response" | jq -r '.logs[].events[] | select(.type == "wasm") | .attributes[] | select(.key == "staking_contract") | .value')
-    echo "###########################" 
+    echo "" 
+    echo "" 
+    echo "" 
+    echo "#################################################################################" 
     echo "dao_address: $dao_addr"
     echo "proposal_addr: $proposal_addr"
     echo "voting_addr: $voting_addr"
     echo "staking_addr: $staking_addr"
-    echo "###########################" 
+    echo "#################################################################################" 
+    echo "" 
+    echo "" 
+    echo ""
+    echo "" 
+    echo ""
 else
     echo "Error: Empty response"
 fi
 
-
-# ####################### 4. Stake Tokens to DAO ###########################
+# ####################### 5. Stake Tokens to DAO ###########################
 echo "Stake Tokens to DAO"
 
 CW20_MSG=$(cat <<EOF 
@@ -229,7 +236,7 @@ if [ -n "$stake_res" ]; then
 else
     echo "Error: Empty response"
 fi
-# ####################### 4. Stake Tokens to DAO ###########################
+
 echo "Stake Tokens to DAO As Bid"
 
 CW20_MSG=$(cat <<EOF 
@@ -256,7 +263,7 @@ else
     echo "Error: Empty response"
 fi
 
-# # ########################### 5.b Migrate Contract As Proposal ########################
+# # ########################### 6 Migrate Contract As Proposal ########################
 echo "Setup Allowance Msg"
 ALLOWANCE_MSG=$(cat <<EOF
 {"increase_allowance":{"spender":"$proposal_addr","amount":"1500000000"}}
@@ -348,13 +355,12 @@ if [ -n "$vote_res" ]; then
 else
     echo "Error: Empty response"
 fi
-
+############ 7. Execute Neta -> V1 Migration ##################
 echo "############ Execute Neta -> V1 Migration ##################"
 EXECUTE_MSG=$(cat <<EOF 
 {"execute":{"proposal_id":1}}
 EOF
 )
-
 execute_response='$binary tx wasm e $proposal_addr "$EXECUTE_MSG" '$tx_flag''
 execute_res=$(eval $execute_response);
 if [ -n "$execute_res" ]; then
@@ -368,7 +374,18 @@ else
     echo "Error: Empty response"
 fi
 
-########################## 6. Migrate From V1 to V2 ########################
+#################### 7.a Check DAO  ####################
+echo "#################### 7.a Check DAO  ####################"
+Q_MSG_V1=$(cat <<EOF 
+{"next_proposal_id":{}}
+EOF
+)
+
+q_count='$binary q wasm contract-state smart $proposal_addr "$Q_MSG_V1"'
+q_count_res=$(eval $q_count);
+echo $q_count_res;
+
+########################## 8. Migrate From V1 to V2 ########################
 echo "############ Migrate V1 -> V2 As Admin ##################"
 MIGRATE=$(cat <<EOF 
 {"deposit_info":{"amount":"15000000","denom":{"token":{"denom":{"cw20":"$cw20_addr"}}},"refund_policy":"only_passed"},"extension":{},"open_proposal_submission":false}
@@ -438,7 +455,7 @@ else
     echo "Error: Empty response"
 fi
 
-########################## 7.Test Migration Worked ########################
+########################## 9.Test Migration Worked ########################
 DUMP_STATE=$(cat <<EOF 
 {"dump_state":{}}
 EOF
@@ -448,7 +465,7 @@ CREATION_POLICY=$(cat <<EOF
 {"proposal_creation_policy":{}}
 EOF
 )
-echo "Test Migration Worked"
+echo "Test V1 -> V2 Migration Worked"
 confirm_migrate_query='$binary q wasm contract-state smart $dao_addr "$DUMP_STATE" -o json'
 migrate_res=$(eval $confirm_migrate_query);
 version=$(echo $migrate_res | jq -r '.data.version.version')
@@ -460,7 +477,7 @@ pre_propose_addr=$(echo $prop_query_res | jq -r '.data.module.addr')
 echo 'pre_propose_addr: '$pre_propose_addr''
 
 echo "Fund DAO"
-fund_dao='$binary tx bank send $admin_addr $dao_addr 100'$denom' '$tx_flag''
+fund_dao='$binary tx bank send $admin_addr $dao_addr 200'$denom' '$tx_flag''
 fund_res=$(eval $fund_dao);
 fund_txhash=$(echo "$fund_res" | jq -r '.txhash')
 echo $fund_txhash
@@ -492,7 +509,7 @@ fi
 
 
 
-# ########################## 7a. Create V2 Proposal ########################
+# ########################## 10a. Create V2 Proposal ########################
 NEW_MSG=$(cat <<EOF 
 {
   "propose": {
@@ -526,8 +543,8 @@ EOF
 echo "Create Proposal"
 second_prop='$binary tx wasm e $pre_propose_addr "$NEW_MSG" '$tx_flag''
 second_prop_res=$(eval $second_prop);
-if [ -n "$migrate_prop_res" ]; then
-    txhash=$(echo "$migrate_prop_res" | jq -r '.txhash')
+if [ -n "$second_prop_res" ]; then
+    txhash=$(echo "$second_prop_res" | jq -r '.txhash')
     echo 'waiting for tx to process'
     echo 'finished with txhash: '$txhash''
     sleep 6;
@@ -600,10 +617,102 @@ fi
 
 echo "Confirm Empty Balance"
 confirm_empty_balance_query='$binary q bank balances $dao_addr -o json'
-bal_query=$(eval $confirm_empty_balance_query);
-echo $bal_que;
+bal_query1=$(eval $confirm_empty_balance_query);
+echo $bal_query1
 
 echo "Confirm Deposit is Returned"
 bal_q='$binary q wasm contract-state smart $cw20_addr "$BAL_MSG" -o json'
 bal_res=$(eval $bal_q);
 echo $bal_res;
+
+
+echo "Confirm Next Propsal Id is 3"
+q_count='$binary q wasm contract-state smart $proposal_addr "$Q_MSG_V1"'
+q_count_res=$(eval $q_count);
+echo $q_count_res;
+
+
+echo "Create Another Proposal "
+third_prop='$binary tx wasm e $pre_propose_addr "$NEW_MSG" '$tx_flag''
+third_prop_res=$(eval $third_prop);
+if [ -n "$third_prop_res" ]; then
+    txhash=$(echo "$third_prop_res" | jq -r '.txhash')
+    echo 'waiting for tx to process'
+    echo 'finished with txhash: '$txhash''
+    sleep 6;
+    tx_response=$($binary q tx $txhash -o json)
+    # echo 'finished with tx_response: '$tx_response''
+else
+    echo "Error: Empty response"
+fi
+
+echo "Confirm Deposit is Returned"
+bal_q='$binary q wasm contract-state smart $cw20_addr "$BAL_MSG" -o json'
+bal_res=$(eval $bal_q);
+echo $bal_res;
+
+
+echo "Vote On Proposal as Admin"
+VOTE_MSG=$(cat <<EOF 
+{"vote":{"proposal_id":3,"vote": "yes"}}
+EOF
+)
+sleep 2;
+vote_msg_response='$binary tx wasm e $proposal_addr "$VOTE_MSG" '$tx_flag''
+vote_res=$(eval $vote_msg_response);
+if [ -n "$vote_res" ]; then
+    txhash=$(echo "$vote_res" | jq -r '.txhash')
+    echo 'waiting for tx to process'
+    echo 'finished with txhash: '$txhash''
+    sleep 6;
+    tx_response=$($binary q tx $txhash -o json)
+    # echo 'finished with tx_response: '$tx_response''
+else
+    echo "Error: Empty response"
+fi
+
+echo "Vote On Proposal as Bidder"
+VOTE_MSG=$(cat <<EOF 
+{"vote":{"proposal_id":3,"vote": "yes"}}
+EOF
+)
+vote_msg_response='$binary tx wasm e $proposal_addr "$VOTE_MSG" '$tx_flag2''
+vote_res=$(eval $vote_msg_response);
+if [ -n "$vote_res" ]; then
+    txhash=$(echo "$vote_res" | jq -r '.txhash')
+    echo 'waiting for tx to process'
+    echo 'finished with txhash: '$txhash''
+    sleep 6;
+    tx_response=$($binary q tx $txhash -o json)
+    # echo 'finished with tx_response: '$tx_response''
+else
+    echo "Error: Empty response"
+fi
+
+echo "Execute Proposal"
+EXECUTE_MSG=$(cat <<EOF 
+{"execute":{"proposal_id":3}}
+EOF
+)
+execute_response='$binary tx wasm e $proposal_addr "$EXECUTE_MSG" '$tx_flag''
+execute_res=$(eval $execute_response);
+if [ -n "$execute_res" ]; then
+    txhash=$(echo "$execute_res" | jq -r '.txhash')
+    echo 'waiting for tx to process'
+    echo 'finished with txhash: '$txhash''
+    sleep 6;
+    tx_response=$($binary q tx $txhash -o json)
+    # echo 'finished with tx_response: '$tx_response''
+else
+    echo "Error: Empty response"
+fi
+
+echo "Confirm Empty Balance"
+confirm_empty_balance_query='$binary q bank balances $dao_addr -o json'
+bal_query1=$(eval $confirm_empty_balance_query);
+echo $bal_query1
+
+echo "Confirm Next Propsal Id is 4"
+q_count='$binary q wasm contract-state smart $proposal_addr "$Q_MSG_V1"'
+q_count_res=$(eval $q_count);
+echo $q_count_res;
