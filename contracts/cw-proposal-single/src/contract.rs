@@ -1,37 +1,46 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Reply, Response,
-    StdResult, Storage, WasmMsg,
+    to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Order, Reply,
+    Response, StdResult, Storage, WasmMsg,
 };
-use cw2::set_contract_version;
+use cw2::{get_contract_version, set_contract_version, ContractVersion};
 use cw_core_interface::voting::IsActiveResponse;
+use cw_proposal_single_v1 as neta;
 use cw_storage_plus::Bound;
 use cw_utils::Duration;
 use indexable_hooks::Hooks;
 use proposal_hooks::{new_proposal_hooks, proposal_status_changed_hooks};
 use vote_hooks::new_vote_hooks;
 
-use voting::deposit::{get_deposit_msg, get_return_deposit_msg, DepositInfo};
-use voting::proposal::{DEFAULT_LIMIT, MAX_PROPOSAL_SIZE};
-use voting::status::Status;
-use voting::threshold::Threshold;
-use voting::voting::{get_total_power, get_voting_power, validate_voting_period, Vote, Votes};
+use voting::{
+    status::Status,
+    threshold::Threshold,
+    voting::{Vote, Votes},
+};
 
-use crate::msg::MigrateMsg;
-use crate::proposal::SingleChoiceProposal;
-use crate::state::Config;
 use crate::{
     error::ContractError,
-    msg::{ExecuteMsg, InstantiateMsg, QueryMsg},
-    proposal::advance_proposal_id,
-    query::ProposalListResponse,
-    query::{ProposalResponse, VoteInfo, VoteListResponse, VoteResponse},
-    state::{Ballot, BALLOTS, CONFIG, PROPOSALS, PROPOSAL_COUNT, PROPOSAL_HOOKS, VOTE_HOOKS},
+    msg::{DepositInfo, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
+    proposal::{advance_proposal_id, next_proposal_id, Proposal},
+    query::{ProposalListResponse, ProposalResponse, VoteInfo, VoteListResponse, VoteResponse},
+    state::{
+        get_deposit_msg, get_return_deposit_msg, Ballot, Config, BALLOTS, CONFIG, OG_CONFIG,
+        PROPOSALS, PROPOSAL_COUNT, PROPOSAL_HOOKS, VOTE_HOOKS,
+    },
+    utils::{get_total_power, get_voting_power, validate_voting_period},
+    v1_neta::{
+        neta_duration_to_v1, neta_expiration_to_v1, neta_status_to_v1, neta_threshold_to_v1,
+        neta_votes_to_v1,
+    },
 };
 
 const CONTRACT_NAME: &str = "crates.io:cw-govmod-single";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Default limit for proposal pagination.
+const DEFAULT_LIMIT: u64 = 30;
+const MAX_PROPOSAL_SIZE: u64 = 30_000;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -53,11 +62,6 @@ pub fn instantiate(
     let (min_voting_period, max_voting_period) =
         validate_voting_period(msg.min_voting_period, msg.max_voting_period)?;
 
-    let executor_addr: Option<Addr> = msg
-        .executor_addr
-        .map(|human| deps.api.addr_validate(&human))
-        .transpose()?;
-
     let config = Config {
         threshold: msg.threshold,
         max_voting_period,
@@ -66,12 +70,11 @@ pub fn instantiate(
         dao: dao.clone(),
         deposit_info,
         allow_revoting: msg.allow_revoting,
-        executor_addr,
     };
 
-    // Initialize proposal count to zero so that queries return zero
+    // Initialize proposal count to 0 so that queries return zero
     // instead of None.
-    PROPOSAL_COUNT.save(deps.storage, &0)?;
+    PROPOSAL_COUNT.save(deps.storage, &1)?;
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default()
@@ -93,7 +96,6 @@ pub fn execute(
             msgs,
         } => execute_propose(deps, env, info.sender, title, description, msgs),
         ExecuteMsg::Vote { proposal_id, vote } => execute_vote(deps, env, info, proposal_id, vote),
-        ExecuteMsg::Veto { proposal_id } => execute_veto(deps, env, info, proposal_id),
         ExecuteMsg::Execute { proposal_id } => execute_execute(deps, env, info, proposal_id),
         ExecuteMsg::Close { proposal_id } => execute_close(deps, env, info, proposal_id),
         ExecuteMsg::UpdateConfig {
@@ -125,7 +127,6 @@ pub fn execute(
         ExecuteMsg::RemoveVoteHook { address } => {
             execute_remove_vote_hook(deps, env, info, address)
         }
-        ExecuteMsg::AssignExecutor { address } => execute_assign_executor(deps, env, info, address),
     }
 }
 
@@ -174,7 +175,7 @@ pub fn execute_propose(
 
     let proposal = {
         // Limit mutability to this block.
-        let mut proposal = SingleChoiceProposal {
+        let mut proposal = Proposal {
             title,
             description,
             proposer: sender.clone(),
@@ -188,9 +189,6 @@ pub fn execute_propose(
             votes: Votes::zero(),
             allow_revoting: config.allow_revoting,
             deposit_info: config.deposit_info.clone(),
-            created: env.block.time,
-            last_updated: env.block.time,
-            vetoed: false,
         };
         // Update the proposal's status. Addresses case where proposal
         // expires on the same block as it is created.
@@ -262,9 +260,6 @@ pub fn execute_execute(
     }
 
     prop.status = Status::Executed;
-    // Update proposal's last updated timestamp.
-    prop.last_updated = env.block.time;
-
     PROPOSALS.save(deps.storage, proposal_id, &prop)?;
 
     let refund_message = match prop.deposit_info {
@@ -381,7 +376,6 @@ pub fn execute_vote(
         info.sender.to_string(),
         vote.to_string(),
     )?;
-
     Ok(Response::default()
         .add_submessages(change_hooks)
         .add_submessages(vote_hooks)
@@ -392,50 +386,6 @@ pub fn execute_vote(
         .add_attribute("status", prop.status.to_string()))
 }
 
-// note - not in daodao
-pub fn execute_veto(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    proposal_id: u64,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-
-    if config.executor_addr != Some(info.sender.clone()) {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    let mut prop = PROPOSALS
-        .may_load(deps.storage, proposal_id)?
-        .ok_or(ContractError::NoSuchProposal { id: proposal_id })?;
-
-    if prop.current_status(&env.block) != Status::Open {
-        return Err(ContractError::NotOpen { id: proposal_id });
-    }
-
-    let old_status = prop.status;
-
-    prop.vetoed = true;
-    prop.status = Status::Rejected;
-    // Update proposal's last updated timestamp.
-    prop.last_updated = env.block.time;
-    PROPOSALS.save(deps.storage, proposal_id, &prop)?;
-
-    let changed_hooks = proposal_status_changed_hooks(
-        PROPOSAL_HOOKS,
-        deps.storage,
-        proposal_id,
-        old_status.to_string(),
-        prop.status.to_string(),
-    )?;
-
-    Ok(Response::default()
-        .add_submessages(changed_hooks)
-        .add_attribute("action", "veto")
-        .add_attribute("sender", info.sender)
-        .add_attribute("proposal_id", proposal_id.to_string()))
-}
-
 pub fn execute_close(
     deps: DepsMut,
     env: Env,
@@ -443,7 +393,6 @@ pub fn execute_close(
     proposal_id: u64,
 ) -> Result<Response, ContractError> {
     let mut prop = PROPOSALS.load(deps.storage, proposal_id)?;
-    let config = CONFIG.load(deps.storage)?;
 
     // Update status to ensure that proposals which were open and have
     // expired are moved to "rejected."
@@ -456,21 +405,16 @@ pub fn execute_close(
 
     let refund_message = match &prop.deposit_info {
         Some(deposit_info) => {
-            let receiver = if deposit_info.refund_failed_proposals {
-                &prop.proposer
+            if deposit_info.refund_failed_proposals {
+                get_return_deposit_msg(deposit_info, &prop.proposer)?
             } else {
-                // If we aren't refunding failed proposals then return
-                // the depost to the DAO treasury on close.
-                &config.dao
-            };
-            get_return_deposit_msg(deposit_info, receiver)?
+                vec![]
+            }
         }
         None => vec![],
     };
 
     prop.status = Status::Closed;
-    // Update proposal's last updated timestamp.
-    prop.last_updated = env.block.time;
     PROPOSALS.save(deps.storage, proposal_id, &prop)?;
 
     let changed_hooks = proposal_status_changed_hooks(
@@ -527,7 +471,6 @@ pub fn execute_update_config(
             allow_revoting,
             dao,
             deposit_info,
-            executor_addr: config.executor_addr, // should NOT change via update config
         },
     )?;
 
@@ -641,33 +584,6 @@ pub fn execute_remove_vote_hook(
         .add_attribute("address", address))
 }
 
-pub fn execute_assign_executor(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    address: Option<String>,
-) -> Result<Response, ContractError> {
-    let mut config = CONFIG.load(deps.storage)?;
-
-    // Only the DAO via prop OR the executor directly may call this method.
-    if info.sender == config.dao || config.executor_addr == Some(info.sender.clone()) {
-        // executor can be removed or reassigned to another address
-        let new_executor_addr: Option<Addr> = address
-            .map(|human| deps.api.addr_validate(&human))
-            .transpose()?;
-
-        config.executor_addr = new_executor_addr;
-
-        CONFIG.save(deps.storage, &config)?;
-    } else {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    Ok(Response::default()
-        .add_attribute("action", "assign_executor")
-        .add_attribute("sender", info.sender))
-}
-
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -690,6 +606,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => query_reverse_proposals(deps, env, start_before, limit),
         QueryMsg::ProposalHooks {} => to_binary(&PROPOSAL_HOOKS.query_hooks(deps)?),
         QueryMsg::VoteHooks {} => to_binary(&VOTE_HOOKS.query_hooks(deps)?),
+        QueryMsg::NextProposalId {} => query_next_proposal_id(deps),
     }
 }
 
@@ -714,7 +631,7 @@ pub fn query_list_proposals(
     let props: Vec<ProposalResponse> = PROPOSALS
         .range(deps.storage, min, None, cosmwasm_std::Order::Ascending)
         .take(limit as usize)
-        .collect::<Result<Vec<(u64, SingleChoiceProposal)>, _>>()?
+        .collect::<Result<Vec<(u64, Proposal)>, _>>()?
         .into_iter()
         .map(|(id, proposal)| proposal.into_response(&env.block, id))
         .collect();
@@ -733,7 +650,7 @@ pub fn query_reverse_proposals(
     let props: Vec<ProposalResponse> = PROPOSALS
         .range(deps.storage, None, max, cosmwasm_std::Order::Descending)
         .take(limit as usize)
-        .collect::<Result<Vec<(u64, SingleChoiceProposal)>, _>>()?
+        .collect::<Result<Vec<(u64, Proposal)>, _>>()?
         .into_iter()
         .map(|(id, proposal)| proposal.into_response(&env.block, id))
         .collect();
@@ -744,6 +661,10 @@ pub fn query_reverse_proposals(
 pub fn query_proposal_count(deps: Deps) -> StdResult<Binary> {
     let proposal_count = PROPOSAL_COUNT.load(deps.storage)?;
     to_binary(&proposal_count)
+}
+
+pub fn query_next_proposal_id(deps: Deps) -> StdResult<Binary> {
+    to_binary(&next_proposal_id(deps.storage)?)
 }
 
 pub fn query_vote(deps: Deps, proposal_id: u64, voter: String) -> StdResult<Binary> {
@@ -792,9 +713,79 @@ pub fn query_info(deps: Deps) -> StdResult<Binary> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
-    // Don't do any state migrations.
-    Ok(Response::default())
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
+    let ContractVersion { version, .. } = get_contract_version(deps.storage)?;
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    if version == CONTRACT_VERSION {
+        return Err(ContractError::AlreadyMigrated {});
+    }
+
+    match msg {
+        MigrateMsg::NetaToV1 {} => {
+            let current_config = neta::state::CONFIG.load(deps.storage)?;
+            let max_voting_period = neta_duration_to_v1(current_config.max_voting_period);
+
+            // Update the stored config to remove the customized executor stuff.
+            OG_CONFIG.save(
+                deps.storage,
+                &Config {
+                    threshold: neta_threshold_to_v1(current_config.threshold),
+                    max_voting_period,
+                    min_voting_period: current_config.min_voting_period.map(neta_duration_to_v1),
+                    only_members_execute: current_config.only_members_execute,
+                    allow_revoting: current_config.allow_revoting,
+                    dao: current_config.dao.clone(),
+                    deposit_info: None,
+                },
+            )?;
+
+            let current_proposals = neta::state::PROPOSALS
+                .range(deps.storage, None, None, Order::Ascending)
+                .collect::<StdResult<Vec<(u64, neta::proposal::Proposal)>>>()?;
+
+            current_proposals
+                .clone()
+                .into_iter()
+                .try_for_each::<_, Result<_, ContractError>>(|(id, prop)| {
+                    if prop
+                        .deposit_info
+                        .map(|info| !info.deposit.is_zero())
+                        .unwrap_or(false)
+                        && prop.status != voting_v1::Status::Closed
+                        && prop.status != voting_v1::Status::Executed
+                    {
+                        // No migration path for outstanding
+                        // deposits.
+                        return Err(ContractError::PendingProposals {});
+                    }
+
+                    let migrated_proposal = Proposal {
+                        title: prop.title,
+                        description: prop.description,
+                        proposer: prop.proposer,
+                        start_height: prop.start_height,
+                        min_voting_period: prop.min_voting_period.map(neta_expiration_to_v1),
+                        expiration: neta_expiration_to_v1(prop.expiration),
+                        threshold: neta_threshold_to_v1(prop.threshold),
+                        total_power: prop.total_power,
+                        msgs: prop.msgs,
+                        status: neta_status_to_v1(prop.status),
+                        votes: neta_votes_to_v1(prop.votes),
+                        allow_revoting: prop.allow_revoting,
+                        deposit_info: None,
+                    };
+                    PROPOSAL_COUNT.save(deps.storage, &(id))?;
+                    PROPOSALS
+                        .save(deps.storage, id, &migrated_proposal)
+                        .map_err(|e| e.into())
+                })?;
+            Ok(Response::default()
+                .add_attribute("action", "migrate")
+                .add_attribute("from", "netadao"))
+        }
+        MigrateMsg::FromCompatible {} => Ok(Response::default()),
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

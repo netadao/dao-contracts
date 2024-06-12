@@ -1,19 +1,21 @@
-use crate::query::ProposalResponse;
-use crate::state::PROPOSAL_COUNT;
-use cosmwasm_std::{
-    Addr, BlockInfo, CosmosMsg, Decimal, Empty, StdResult, Storage, Timestamp, Uint128,
-};
+use cosmwasm_std::{Addr, BlockInfo, CosmosMsg, Decimal, Empty, StdResult, Storage, Uint128};
 use cw_utils::Expiration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use voting::deposit::CheckedDepositInfo;
-use voting::proposal::Proposal;
-use voting::status::Status;
-use voting::threshold::{PercentageThreshold, Threshold};
-use voting::voting::{does_vote_count_fail, does_vote_count_pass, Votes};
+use voting::{
+    status::Status,
+    threshold::{PercentageThreshold, Threshold},
+    voting::{compare_vote_count, VoteCmp, Votes},
+};
+
+
+use crate::{
+    query::ProposalResponse,
+    state::{CheckedDepositInfo, PROPOSAL_COUNT},
+};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
-pub struct SingleChoiceProposal {
+pub struct Proposal {
     pub title: String,
     pub description: String,
     /// The address that created this proposal.
@@ -44,33 +46,58 @@ pub struct SingleChoiceProposal {
     /// Information about the deposit that was sent as part of this
     /// proposal. None if no deposit.
     pub deposit_info: Option<CheckedDepositInfo>,
-    /// The timestamp at which this proposal was created.
-    pub created: Timestamp,
-    /// The timestamp at which this proposal's status last changed (e.g. Passed, Executed).
-    pub last_updated: Timestamp,
-    /// Proposal was vetoed by the executor
-    pub vetoed: bool,
-}
-
-impl Proposal for SingleChoiceProposal {
-    fn proposer(&self) -> Addr {
-        self.proposer.clone()
-    }
-    fn deposit_info(&self) -> Option<CheckedDepositInfo> {
-        self.deposit_info.clone()
-    }
-    fn status(&self) -> Status {
-        self.status
-    }
 }
 
 pub fn advance_proposal_id(store: &mut dyn Storage) -> StdResult<u64> {
-    let id: u64 = PROPOSAL_COUNT.may_load(store)?.unwrap_or_default() + 1;
+    let id: u64 = PROPOSAL_COUNT.load(store)? + 1;
     PROPOSAL_COUNT.save(store, &id)?;
     Ok(id)
 }
+pub fn next_proposal_id(store: &dyn Storage) -> StdResult<u64> {
+    Ok(PROPOSAL_COUNT.may_load(store)?.unwrap_or_default() + 1)
+}
 
-impl SingleChoiceProposal {
+pub fn does_vote_count_pass(
+    yes_votes: Uint128,
+    options: Uint128,
+    percent: PercentageThreshold,
+) -> bool {
+    // Don't pass proposals if all the votes are abstain.
+    if options.is_zero() {
+        return false;
+    }
+    match percent {
+        PercentageThreshold::Majority {} => yes_votes.full_mul(2u64) > options.into(),
+        PercentageThreshold::Percent(percent) => {
+            compare_vote_count(yes_votes, VoteCmp::Geq, options, percent)
+        }
+    }
+}
+
+pub fn does_vote_count_fail(
+    no_votes: Uint128,
+    options: Uint128,
+    percent: PercentageThreshold,
+) -> bool {
+    // All abstain votes should result in a rejected proposal.
+    if options.is_zero() {
+        return true;
+    }
+    match percent {
+        PercentageThreshold::Majority {} => {
+            // Fails if no votes have >= half of all votes.
+            no_votes.full_mul(2u64) >= options.into()
+        }
+        PercentageThreshold::Percent(percent) => compare_vote_count(
+            no_votes,
+            VoteCmp::Greater,
+            options,
+            Decimal::one() - percent,
+        ),
+    }
+}
+
+impl Proposal {
     /// Consumes the proposal and returns a version which may be used
     /// in a query response. The difference being that proposal
     /// statuses are only updated on vote, execute, and close
@@ -98,12 +125,7 @@ impl SingleChoiceProposal {
 
     /// Sets a proposals status to its current status.
     pub fn update_status(&mut self, block: &BlockInfo) {
-        let new_status = self.current_status(block);
-        // Update last_updated only if status changed.
-        if new_status != self.status {
-            self.last_updated = block.time
-        }
-        self.status = new_status
+        self.status = self.current_status(block);
     }
 
     /// Returns true iff this proposal is sure to pass (even before
@@ -278,7 +300,7 @@ mod test {
         is_expired: bool,
         min_voting_period_elapsed: bool,
         allow_revoting: bool,
-    ) -> (SingleChoiceProposal, BlockInfo) {
+    ) -> (Proposal, BlockInfo) {
         let block = mock_env().block;
         let expiration = match is_expired {
             true => Expiration::AtHeight(block.height - 5),
@@ -288,8 +310,7 @@ mod test {
             true => Expiration::AtHeight(block.height - 5),
             false => Expiration::AtHeight(block.height + 5),
         };
-
-        let prop = SingleChoiceProposal {
+        let prop = Proposal {
             title: "Demo".to_string(),
             description: "Info".to_string(),
             proposer: Addr::unchecked("test"),
@@ -303,9 +324,6 @@ mod test {
             total_power,
             votes,
             deposit_info: None,
-            created: block.time,
-            last_updated: block.time,
-            vetoed: false,
         };
         (prop, block)
     }

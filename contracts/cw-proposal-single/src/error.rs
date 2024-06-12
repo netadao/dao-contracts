@@ -18,9 +18,6 @@ pub enum ContractError {
     #[error("{0}")]
     ThresholdError(#[from] voting::threshold::ThresholdError),
 
-    #[error("{0}")]
-    VotingError(#[from] voting::error::VotingError),
-
     #[error("Suggested proposal expiration is larger than the maximum proposal duration")]
     InvalidExpiration {},
 
@@ -54,7 +51,7 @@ pub enum ContractError {
     #[error("Proposal is closed.")]
     Closed {},
 
-    #[error("Only rejected proposals may be closed.")]
+    #[error("Only rejected or expired proposals may be closed.")]
     WrongCloseStatus {},
 
     #[error("The DAO is currently inactive, you cannot create proposals")]
@@ -66,6 +63,11 @@ pub enum ContractError {
     #[error("Min voting period must be less than or equal to max voting period")]
     InvalidMinVotingPeriod {},
 
-    #[error("Executor role not assigned")]
-    NoExecutorAssigned {},
+    #[error("can not migrate. current version is up to date")]
+    AlreadyMigrated {},
+
+    #[error(
+        "all proposals with deposits must be completed out (closed or executed) before migration"
+    )]
+    PendingProposals {},
 }

@@ -113,7 +113,6 @@ fn instantiate_with_staked_balances_voting() {
                 only_members_execute: true,
                 allow_revoting: false,
                 deposit_info: None,
-                executor_addr: None,
             })
             .unwrap(),
         }],
